@@ -25,14 +25,14 @@ func main() {
 
 	log.Println("Successfully connected to PostgreSQL")
 
-	// Init Redis Asynq Client
-	asynqClient, err := config.NewRedisAsynqClient()
+	// Init Redis Client
+	redisClient, err := config.NewRedisClient(ctx)
 	if err != nil {
-		log.Fatalf("Failed to initialize Redis Asynq client: %v", err)
+		log.Fatalf("Failed to initialize Redis client: %v", err)
 	}
-	defer asynqClient.Close()
+	defer redisClient.Close()
 
-	log.Println("Successfully connected to Redis Asynq")
+	log.Println("Successfully connected to Redis")
 
 	// TODO: Setup delivery layer (HTTP routes, CLI handlers) here
 }

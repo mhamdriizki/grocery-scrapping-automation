@@ -16,8 +16,8 @@ func NewPostgresDB(ctx context.Context) (*pgxpool.Pool, error) {
 		host := getEnvOrDefault("DB_HOST", "localhost")
 		port := getEnvOrDefault("DB_PORT", "5433")
 		user := getEnvOrDefault("DB_USER", "postgres")
-		pass := getEnvOrDefault("DB_PASSWORD", "postgres")
-		name := getEnvOrDefault("DB_NAME", "grocery_engine")
+		pass := getEnvOrDefault("DB_PASSWORD", "admin")
+		name := getEnvOrDefault("DB_NAME", "grocery_db")
 		
 		dsn = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, pass, host, port, name)
 	}

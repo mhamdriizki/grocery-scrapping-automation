@@ -21,18 +21,3 @@ func TestGetEnvOrDefault(t *testing.T) {
 	// Cleanup
 	os.Unsetenv("TEST_KEY_SET")
 }
-
-func TestGetAsynqRedisOpt(t *testing.T) {
-	os.Setenv("REDIS_HOST", "127.0.0.1")
-	os.Setenv("REDIS_PORT", "6380")
-	os.Setenv("REDIS_PASSWORD", "secret")
-
-	opt := GetAsynqRedisOpt()
-	assert.Equal(t, "127.0.0.1:6380", opt.Addr)
-	assert.Equal(t, "secret", opt.Password)
-
-	// Cleanup
-	os.Unsetenv("REDIS_HOST")
-	os.Unsetenv("REDIS_PORT")
-	os.Unsetenv("REDIS_PASSWORD")
-}

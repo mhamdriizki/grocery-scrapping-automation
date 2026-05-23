@@ -1,44 +1,35 @@
 package config
 
 import (
+	"context"
 	"fmt"
+	"time"
 
-	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 )
 
-// NewRedisAsynqClient initializes a Redis connection used by asynq.
-func NewRedisAsynqClient() (*asynq.Client, error) {
+// NewRedisClient initializes a standard Redis connection using redis-go.
+func NewRedisClient(ctx context.Context) (*redis.Client, error) {
 	host := getEnvOrDefault("REDIS_HOST", "localhost")
 	port := getEnvOrDefault("REDIS_PORT", "6379")
 	pass := getEnvOrDefault("REDIS_PASSWORD", "")
 
 	redisAddr := fmt.Sprintf("%s:%s", host, port)
 
-	// In a real scenario, you can define more options
-	opt := asynq.RedisClientOpt{
+	client := redis.NewClient(&redis.Options{
 		Addr:     redisAddr,
 		Password: pass,
+		DB:       0, // Use default DB
+	})
+
+	// Add timeout for ping to avoid hanging if redis is not running
+	pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	// Ping to ensure connection
+	if err := client.Ping(pingCtx).Err(); err != nil {
+		return nil, fmt.Errorf("failed to ping redis: %w", err)
 	}
 
-	client := asynq.NewClient(opt)
-
-	// We ping Redis by fetching connection or using inspector if needed,
-	// but asynq creates connections lazily or handles dialing on operation.
-	// Asynq Client doesn't have a direct Ping method, so we can test it 
-	// by checking inspector or creating a test task. 
-	// For simplicity, we just return the client.
-	
 	return client, nil
-}
-
-// GetAsynqRedisOpt returns the Redis configuration option for Asynq workers.
-func GetAsynqRedisOpt() asynq.RedisClientOpt {
-	host := getEnvOrDefault("REDIS_HOST", "localhost")
-	port := getEnvOrDefault("REDIS_PORT", "6379")
-	pass := getEnvOrDefault("REDIS_PASSWORD", "")
-
-	return asynq.RedisClientOpt{
-		Addr:     fmt.Sprintf("%s:%s", host, port),
-		Password: pass,
-	}
 }
