@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/hibiken/asynq"
+	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/model"
 	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/repository"
 	scraperUsecase "github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/usecase/scraper"
 )
@@ -33,20 +35,27 @@ func (h *ScrapeHandler) ProcessTaskScrapeGrocery(ctx context.Context, t *asynq.T
 	log.Printf("[worker] Received scrape task | target_url=%s", payload.TargetURL)
 
 	// Initialize the Tip Top scraper usecase
-	scraper := scraperUsecase.NewTipTopScraper()
+	var scrapedProducts []model.Product
 
-	// Execute scraping
-	products, err := scraper.ScrapeKeperluanDapur(ctx)
+	if strings.Contains(strings.ToLower(payload.TargetURL), "tiptop.co.id") {
+		scraper := scraperUsecase.NewTipTopScraper()
+		scrapedProducts, err = scraper.ScrapeKeperluanDapur(ctx)
+	} else if strings.Contains(strings.ToLower(payload.TargetURL), "alfagift.id") {
+		scraper := scraperUsecase.NewAlfagiftScraper()
+		scrapedProducts, err = scraper.ExtractProducts(ctx, payload.TargetURL)
+	} else {
+		return fmt.Errorf("unsupported target URL: %s", payload.TargetURL)
+	}
 	if err != nil {
 		return fmt.Errorf("%w: tiptop scraper failed: %v", asynq.SkipRetry, err)
 	}
 
-	log.Printf("[worker] Saving %d products to database...", len(products))
-	if err := h.productRepo.SaveBatch(ctx, products); err != nil {
+	log.Printf("[worker] Saving %d products to database...", len(scrapedProducts))
+	if err := h.productRepo.SaveBatch(ctx, scrapedProducts); err != nil {
 		// If DB fails, we might want to retry, so we don't wrap with asynq.SkipRetry here
 		return fmt.Errorf("failed to save products to db: %w", err)
 	}
 
-	log.Printf("[worker] Scrape task finished | products_saved=%d | target_url=%s", len(products), payload.TargetURL)
+	log.Printf("[worker] Scrape task finished | products_saved=%d | target_url=%s", len(scrapedProducts), payload.TargetURL)
 	return nil
 }
