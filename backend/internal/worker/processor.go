@@ -8,7 +8,7 @@ import (
 
 // TaskProcessor defines the interface for starting and stopping the worker server.
 type TaskProcessor interface {
-	Start() error
+	Start(scrapeHandler *ScrapeHandler) error
 	Shutdown()
 }
 
@@ -34,11 +34,11 @@ func NewRedisTaskProcessor(redisOpt asynq.RedisClientOpt, concurrency int) *Redi
 
 // Start registers all task handlers and begins processing jobs from the queue.
 // This is a blocking call; it runs until Shutdown() is called.
-func (p *RedisTaskProcessor) Start() error {
+func (p *RedisTaskProcessor) Start(scrapeHandler *ScrapeHandler) error {
 	mux := asynq.NewServeMux()
 
 	// Register task handlers
-	mux.HandleFunc(TaskScrapeGrocery, ProcessTaskScrapeGrocery)
+	mux.HandleFunc(TaskScrapeGrocery, scrapeHandler.ProcessTaskScrapeGrocery)
 
 	if err := p.server.Run(mux); err != nil {
 		return fmt.Errorf("failed to run asynq server: %w", err)
