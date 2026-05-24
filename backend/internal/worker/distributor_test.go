@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewScrapeGroceryTask(t *testing.T) {
-	targetURL := "https://www.tokopedia.com/superindo"
+	targetURL := "https://shop.tiptop.co.id/outlet/Ciputat/category/Keperluan-Dapur?key=63b9444d9121c343a7d3cbc7&item=63c34ab03ac2ba06639c0b36"
 
 	task, err := NewScrapeGroceryTask(targetURL)
 	require.NoError(t, err)
@@ -25,7 +25,7 @@ func TestNewScrapeGroceryTask(t *testing.T) {
 }
 
 func TestParseScrapeGroceryPayload_Valid(t *testing.T) {
-	targetURL := "https://www.superindo.co.id"
+	targetURL := "https://shop.tiptop.co.id/outlet/Ciputat"
 	task, err := NewScrapeGroceryTask(targetURL)
 	require.NoError(t, err)
 
