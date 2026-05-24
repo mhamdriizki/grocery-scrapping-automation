@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/hibiken/asynq"
+	scraperUsecase "github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/usecase/scraper"
 )
 
 // ProcessTaskScrapeGrocery is the handler function for the TaskScrapeGrocery task.
-// It parses the payload and executes the scraping logic.
-// In this initial version, it simulates work as a placeholder for the chromedp integration.
+// It parses the payload and executes the scraping logic via the TipTopScraper usecase.
 func ProcessTaskScrapeGrocery(ctx context.Context, t *asynq.Task) error {
 	payload, err := ParseScrapeGroceryPayload(t)
 	if err != nil {
@@ -19,19 +18,17 @@ func ProcessTaskScrapeGrocery(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("%w: %w", asynq.SkipRetry, err)
 	}
 
-	log.Printf("[worker] Processing scrape task | target_url=%s", payload.TargetURL)
+	log.Printf("[worker] Received scrape task | target_url=%s", payload.TargetURL)
 
-	// --- Placeholder for chromedp scraping logic ---
-	// This simulates the time a real scraping job would take.
-	select {
-	case <-ctx.Done():
-		// Handle context cancellation (e.g., worker shutting down)
-		return ctx.Err()
-	case <-time.After(2 * time.Second):
-		// Simulate scraping work
+	// Initialize the Tip Top scraper usecase
+	scraper := scraperUsecase.NewTipTopScraper()
+
+	// Execute scraping — results are printed to terminal in Phase 1
+	products, err := scraper.ScrapeKepDateperDapur(ctx)
+	if err != nil {
+		return fmt.Errorf("tiptop scraper failed: %w", err)
 	}
-	// -----------------------------------------------
 
-	log.Printf("[worker] Scrape task completed successfully | target_url=%s", payload.TargetURL)
+	log.Printf("[worker] Scrape task finished | products_found=%d | target_url=%s", len(products), payload.TargetURL)
 	return nil
 }
