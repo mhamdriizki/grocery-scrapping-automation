@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/model"
 	"gorm.io/gorm"
@@ -13,6 +14,7 @@ import (
 type ProductRepository interface {
 	Save(ctx context.Context, product *model.Product) error
 	SaveBatch(ctx context.Context, products []model.Product) error
+	FindAll(ctx context.Context, search string) ([]model.Product, error)
 }
 
 type productRepository struct {
@@ -22,6 +24,30 @@ type productRepository struct {
 // NewProductRepository creates a new instance of ProductRepository.
 func NewProductRepository(db *gorm.DB) ProductRepository {
 	return &productRepository{db: db}
+}
+
+// FindAll retrieves products with a relatable search logic.
+func (r *productRepository) FindAll(ctx context.Context, search string) ([]model.Product, error) {
+	var products []model.Product
+	query := r.db.WithContext(ctx)
+
+	if search != "" {
+		// Relatable search: split search terms by space and use OR ILIKE
+		words := strings.Fields(search)
+		if len(words) > 0 {
+			orConditions := r.db.Session(&gorm.Session{NewDB: true})
+			for _, word := range words {
+				orConditions = orConditions.Or("name ILIKE ?", "%"+word+"%")
+			}
+			query = query.Where(orConditions)
+		}
+	}
+
+	err := query.Order("updated_at DESC").Find(&products).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch products: %w", err)
+	}
+	return products, nil
 }
 
 // Save inserts a single product or updates its details if it already exists (upsert).
