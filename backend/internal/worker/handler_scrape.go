@@ -24,7 +24,7 @@ func ProcessTaskScrapeGrocery(ctx context.Context, t *asynq.Task) error {
 	scraper := scraperUsecase.NewTipTopScraper()
 
 	// Execute scraping — results are printed to terminal in Phase 1
-	products, err := scraper.ScrapeKepDateperDapur(ctx)
+	products, err := scraper.ScrapeKeperluanDapur(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: tiptop scraper failed: %v", asynq.SkipRetry, err)
 	}

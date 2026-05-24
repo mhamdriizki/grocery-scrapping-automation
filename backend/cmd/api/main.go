@@ -40,13 +40,10 @@ func main() {
 	distributor := worker.NewRedisTaskDistributor(redisOpt)
 	defer distributor.Close()
 
-	// Enqueue a test scraping job to verify the queue works end-to-end
-	// 3. Enqueue a task to scrape Tip Top
-	taskPayload := worker.ScrapeGroceryPayload{
-		TargetURL: "https://shop.tiptop.co.id/outlet/Ciputat",
-	}
-	task, err := worker.NewScrapeGroceryTask(taskPayload)
-	err = distributor.DistributeTask(ctx, task)
+	// Enqueue a scraping job for Tip Top Ciputat - Keperluan Dapur
+	err = distributor.DistributeScrapeGroceryTask(ctx, worker.ScrapeGroceryPayload{
+		TargetURL: "https://shop.tiptop.co.id/outlet/Ciputat/category/Keperluan-Dapur?key=63b9444d9121c343a7d3cbc7&item=63c34ab03ac2ba06639c0b36",
+	})
 	if err != nil {
 		log.Printf("Warning: Failed to enqueue test task: %v", err)
 	} else {
