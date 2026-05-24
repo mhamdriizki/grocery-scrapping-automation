@@ -64,8 +64,24 @@ func (s *TipTopScraper) ScrapeKepDateperDapur(ctx context.Context) ([]model.Prod
 		}),
 
 		// Step 4: Wait for product list to load after category click
-		chromedp.Sleep(3*time.Second),
-		chromedp.WaitVisible(`.product-item, .product-card, .item-product`, chromedp.ByQuery),
+		// The SPA might show skeleton loaders with text "...Loading" initially.
+		// We use Poll to wait until the product text is no longer "Loading".
+		chromedp.Poll(`
+			(function() {
+				const cards = document.querySelectorAll('.product-item, .product-card, [class*="product"]');
+				if (cards.length === 0) return false;
+				for (let i = 0; i < cards.length; i++) {
+					const text = cards[i].innerText;
+					if (text && text.includes('Loading')) {
+						return false; // Still loading
+					}
+				}
+				// Also ensure we actually have some text
+				return cards[0].innerText.trim().length > 0;
+			})()
+		`, nil, chromedp.WithPollingInterval(1*time.Second), chromedp.WithPollingTimeout(30*time.Second)),
+		// Sleep a bit more just to be safe that all elements are fully populated
+		chromedp.Sleep(2*time.Second),
 
 		// Step 5: Extract all product data via JavaScript
 		chromedp.ActionFunc(func(ctx context.Context) error {
