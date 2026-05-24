@@ -39,8 +39,12 @@ type ScrapedProduct struct {
 func (s *TipTopScraper) ScrapeKepDateperDapur(ctx context.Context) ([]model.Product, error) {
 	log.Println("[TipTopScraper] Starting browser...")
 
+	// Add a 60-second timeout to the entire scraping process to prevent hanging forever
+	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 60*time.Second)
+	defer cancelTimeout()
+
 	opts := pkgscraper.DefaultBrowserOptions()
-	browserCtx, cancel := pkgscraper.NewBrowserContext(ctx, opts)
+	browserCtx, cancel := pkgscraper.NewBrowserContext(timeoutCtx, opts)
 	defer cancel()
 
 	var rawProducts []ScrapedProduct
@@ -55,12 +59,31 @@ func (s *TipTopScraper) ScrapeKepDateperDapur(ctx context.Context) ([]model.Prod
 		}),
 
 		// Step 2: Wait for category list to be visible (SPA renders async)
-		chromedp.WaitVisible(`a.category-item, .category-link, a[href*="category"]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`a.category-item, .category-link, a[href*="category"], .title-category`, chromedp.ByQuery),
 
-		// Step 3: Find and click the "Keperluan Dapur" category link
+		// Step 3: Find and click the "Keperluan Dapur" category link via JS to avoid hanging
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			log.Println("[TipTopScraper] Looking for 'Keperluan Dapur' category...")
-			return chromedp.Click(`//a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'keperluan dapur')]`, chromedp.BySearch).Do(ctx)
+			var clicked bool
+			err := chromedp.Evaluate(`
+				(function() {
+					const links = document.querySelectorAll('a, div, span, h3, h4');
+					for (let i = 0; i < links.length; i++) {
+						if (links[i].innerText && links[i].innerText.toLowerCase().includes('keperluan dapur')) {
+							links[i].click();
+							return true;
+						}
+					}
+					return false;
+				})()
+			`, &clicked).Do(ctx)
+			if err != nil {
+				return err
+			}
+			if !clicked {
+				log.Println("[TipTopScraper] Warning: 'Keperluan Dapur' not found via JS click")
+			}
+			return nil
 		}),
 
 		// Step 4: Wait for product list to load after category click
@@ -129,6 +152,11 @@ func (s *TipTopScraper) ScrapeKepDateperDapur(ctx context.Context) ([]model.Prod
 		}),
 	)
 	if err != nil {
+		// Debug: Dump HTML to see what's on the screen
+		var htmlContent string
+		chromedp.Run(browserCtx, chromedp.Evaluate(`document.body.innerHTML`, &htmlContent))
+		log.Printf("[TipTopScraper] Error occurred. Page HTML dump:\n%s", htmlContent) // Print first 500 chars
+
 		return nil, fmt.Errorf("chromedp run failed: %w", err)
 	}
 

@@ -38,8 +38,6 @@ func NewBrowserContext(ctx context.Context, opts BrowserOptions) (context.Contex
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("ignore-certificate-errors", true),
 		chromedp.UserAgent(opts.UserAgent),
-		// Disable image loading to speed up scraping
-		chromedp.Flag("blink-settings", "imagesEnabled=false"),
 	)
 
 	allocCtx, cancel := chromedp.NewExecAllocator(ctx, allocOpts...)
