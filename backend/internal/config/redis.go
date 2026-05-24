@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -32,4 +33,17 @@ func NewRedisClient(ctx context.Context) (*redis.Client, error) {
 	}
 
 	return client, nil
+}
+
+// GetAsynqRedisOpt returns the Redis configuration option required by the asynq library.
+// It is separate from NewRedisClient because asynq manages its own connection pool internally.
+func GetAsynqRedisOpt() asynq.RedisClientOpt {
+	host := getEnvOrDefault("REDIS_HOST", "localhost")
+	port := getEnvOrDefault("REDIS_PORT", "6379")
+	pass := getEnvOrDefault("REDIS_PASSWORD", "")
+
+	return asynq.RedisClientOpt{
+		Addr:     fmt.Sprintf("%s:%s", host, port),
+		Password: pass,
+	}
 }

@@ -23,3 +23,5 @@ Setiap kali kamu diminta membuat fitur baru atau mengubah kode, kamu WAJIB mengi
 7. Berhenti di situ. Tunggu instruksi atau review dari user untuk di-merge.
 
 Instruksi dan komunikasi dari user akan menggunakan Bahasa Indonesia. Tapi, untuk penamaan variabel, fungsi, struct, komentar di dalam kode (code comments), dan pesan commit/judul Pull Request (PR), kamu WAJIB menggunakan Bahasa Inggris yang standar dan profesional.
+
+CRITICAL RULE: Setelah memberikan 'Plan', kamu WAJIB berhenti total dan menunggu ketikan konfirmasi (misal: 'Approve') dari user sebelum menulis file kode atau menjalankan command terminal apapun.
