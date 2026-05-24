@@ -8,7 +8,10 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/config"
+	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/model"
+	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/repository"
 	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/worker"
+	"github.com/mhamdriizki/grocery-scrapping-automation/backend/pkg/database"
 )
 
 func main() {
@@ -16,6 +19,24 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, relying on environment variables")
 	}
+
+	// Initialize Database Connection
+	db, err := database.NewPostgresDB()
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// AutoMigrate the database schema
+	log.Println("Running AutoMigrate for database schemas...")
+	if err := db.AutoMigrate(&model.Product{}); err != nil {
+		log.Fatalf("Failed to run AutoMigrate: %v", err)
+	}
+
+	// Initialize Repositories
+	productRepo := repository.NewProductRepository(db)
+
+	// Initialize Handlers
+	scrapeHandler := worker.NewScrapeHandler(productRepo)
 
 	// Get asynq-specific Redis options
 	redisOpt := config.GetAsynqRedisOpt()
@@ -27,7 +48,7 @@ func main() {
 	// Start the processor in a goroutine since server.Run() is blocking
 	log.Println("Starting Asynq worker server...")
 	go func() {
-		if err := processor.Start(); err != nil {
+		if err := processor.Start(scrapeHandler); err != nil {
 			log.Fatalf("Asynq worker server failed: %v", err)
 		}
 	}()
