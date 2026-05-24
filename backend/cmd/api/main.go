@@ -41,9 +41,12 @@ func main() {
 	defer distributor.Close()
 
 	// Enqueue a test scraping job to verify the queue works end-to-end
-	err = distributor.DistributeScrapeGroceryTask(ctx, worker.ScrapeGroceryPayload{
-		TargetURL: "https://www.tokopedia.com/superindo",
-	})
+	// 3. Enqueue a task to scrape Tip Top
+	taskPayload := worker.ScrapeGroceryPayload{
+		TargetURL: "https://shop.tiptop.co.id/outlet/Ciputat",
+	}
+	task, err := worker.NewScrapeGroceryTask(taskPayload)
+	err = distributor.DistributeTask(ctx, task)
 	if err != nil {
 		log.Printf("Warning: Failed to enqueue test task: %v", err)
 	} else {
