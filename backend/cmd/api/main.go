@@ -3,10 +3,19 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/config"
+	deliveryHttp "github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/delivery/http"
+	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/repository"
+	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/usecase/product"
 	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/worker"
+	"github.com/mhamdriizki/grocery-scrapping-automation/backend/pkg/database"
 )
 
 func main() {
@@ -15,40 +24,73 @@ func main() {
 		log.Println("No .env file found, relying on environment variables")
 	}
 
-	ctx := context.Background()
-
-	// Init Database
-	dbPool, err := config.NewPostgresDB(ctx)
+	// Init PostgreSQL (GORM)
+	db, err := database.NewPostgresDB()
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer dbPool.Close()
 
-	log.Println("Successfully connected to PostgreSQL")
-
-	// Init Redis Client (for direct queries if needed)
-	redisClient, err := config.NewRedisClient(ctx)
-	if err != nil {
-		log.Fatalf("Failed to initialize Redis client: %v", err)
-	}
-	defer redisClient.Close()
-
-	log.Println("Successfully connected to Redis")
-
-	// Init Task Distributor (API server uses this to enqueue scraping jobs)
+	// Init Redis Client & Task Distributor
 	redisOpt := config.GetAsynqRedisOpt()
 	distributor := worker.NewRedisTaskDistributor(redisOpt)
 	defer distributor.Close()
 
-	// Enqueue a scraping job for Tip Top Ciputat - Keperluan Dapur
-	err = distributor.DistributeScrapeGroceryTask(ctx, worker.ScrapeGroceryPayload{
-		TargetURL: "https://shop.tiptop.co.id/outlet/Ciputat/category/Keperluan-Dapur?key=63b9444d9121c343a7d3cbc7&item=63c34ab03ac2ba06639c0b36",
+	// Init Repositories
+	productRepo := repository.NewProductRepository(db)
+
+	// Init Usecases
+	productUsecase := product.NewProductUsecase(productRepo)
+
+	// Init Handlers
+	productHandler := deliveryHttp.NewProductHandler(productUsecase)
+	scrapeHandler := deliveryHttp.NewScrapeHandler(distributor)
+
+	// Setup HTTP Router
+	mux := http.NewServeMux()
+
+	// Endpoints
+	mux.HandleFunc("/api/v1/products", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			productHandler.GetProducts(w, r)
+		} else {
+			deliveryHttp.JSON(w, http.StatusMethodNotAllowed, false, "Method not allowed", nil)
+		}
 	})
-	if err != nil {
-		log.Printf("Warning: Failed to enqueue test task: %v", err)
-	} else {
-		log.Println("Successfully enqueued test task: task:scrape_grocery")
+
+	mux.HandleFunc("/api/v1/scrape", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			scrapeHandler.TriggerScrape(w, r)
+		} else {
+			deliveryHttp.JSON(w, http.StatusMethodNotAllowed, false, "Method not allowed", nil)
+		}
+	})
+
+	server := &http.Server{
+		Addr:    ":8081",
+		Handler: mux,
 	}
 
-	// TODO: Setup HTTP delivery layer (routes, handlers) here
+	// Run Server in a goroutine
+	go func() {
+		log.Println("Starting API server on port 8081")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed to start: %v", err)
+		}
+	}()
+
+	// Graceful Shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down API server gracefully...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("API Server exited properly")
 }
