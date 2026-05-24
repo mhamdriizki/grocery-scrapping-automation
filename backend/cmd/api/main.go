@@ -6,6 +6,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/config"
+	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/worker"
 )
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 
 	log.Println("Successfully connected to PostgreSQL")
 
-	// Init Redis Client
+	// Init Redis Client (for direct queries if needed)
 	redisClient, err := config.NewRedisClient(ctx)
 	if err != nil {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
@@ -34,5 +35,20 @@ func main() {
 
 	log.Println("Successfully connected to Redis")
 
-	// TODO: Setup delivery layer (HTTP routes, CLI handlers) here
+	// Init Task Distributor (API server uses this to enqueue scraping jobs)
+	redisOpt := config.GetAsynqRedisOpt()
+	distributor := worker.NewRedisTaskDistributor(redisOpt)
+	defer distributor.Close()
+
+	// Enqueue a test scraping job to verify the queue works end-to-end
+	err = distributor.DistributeScrapeGroceryTask(ctx, worker.ScrapeGroceryPayload{
+		TargetURL: "https://www.tokopedia.com/superindo",
+	})
+	if err != nil {
+		log.Printf("Warning: Failed to enqueue test task: %v", err)
+	} else {
+		log.Println("Successfully enqueued test task: task:scrape_grocery")
+	}
+
+	// TODO: Setup HTTP delivery layer (routes, handlers) here
 }
