@@ -4,11 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/chromedp"
 	"github.com/mhamdriizki/grocery-scrapping-automation/backend/internal/model"
 )
@@ -44,97 +41,59 @@ func (s *AlfagiftScraper) ExtractProducts(ctx context.Context, targetURL string)
 
 	var products []model.Product
 	
-	// We use a robust JS evaluation to extract products since CSS classes might change.
-	// It scans common e-commerce product card structures.
+	// We use chromedp to evaluate a fetch request to the internal API, which bypasses the frontend
+	// location modal restrictions while reusing the browser's dynamic tokens.
+	fetchScript := `
+		window.apiResponse = null;
+		fetch('https://webcommerce-gw.alfagift.id/v2/products/category/5b85712ca3834cdebbbc4363?sortDirection=asc&start=0&limit=60', {
+			headers: {
+				'Accept': 'application/json',
+				'Content-Type': 'application/json'
+			}
+		}).then(res => res.json()).then(data => { window.apiResponse = data; });
+	`
 	extractScript := `
 		(() => {
 			let results = [];
-			// Try to find product cards based on common keywords in classes
-			let cards = document.querySelectorAll('[class*="product-card"], [class*="productCard"], .list-product-catalog > div, [class*="product-item"]');
-			
-			cards.forEach(card => {
-				let nameEl = card.querySelector('[class*="name"], [class*="title"], p.fw7, p.fw5');
-				let priceEl = card.querySelector('[class*="price"], [class*="text-danger"], p.text-primary, p[class*="price"]');
-				let imgEl = card.querySelector('img');
-				
-				if (nameEl && priceEl && imgEl) {
-					let name = nameEl.innerText.trim();
-					let priceStr = priceEl.innerText.trim();
-					let image = imgEl.src;
-					
-					// Basic validation
-					if (name.length > 0 && priceStr.includes('Rp')) {
-						results.push({
-							name: name,
-							price: priceStr,
-							image_url: image
-						});
-					}
-				}
-			});
+			if (window.apiResponse && window.apiResponse.products) {
+				window.apiResponse.products.forEach(p => {
+					results.push({
+						name: p.productName,
+						price: p.finalPrice ? p.finalPrice : p.basePrice,
+						image_url: p.image
+					});
+				});
+			}
 			return results;
 		})()
 	`
 
 	var rawResults []struct {
-		Name     string `json:"name"`
-		Price    string `json:"price"`
-		ImageURL string `json:"image_url"`
+		Name     string  `json:"name"`
+		Price    float64 `json:"price"`
+		ImageURL string  `json:"image_url"`
 	}
 
 	err := chromedp.Run(taskCtx,
-		chromedp.Navigate(targetURL),
-		// Wait for the main app to load
-		chromedp.Sleep(10*time.Second),
-		
-		// Attempt to click the location modal overlay or default button if it exists
-		// In Alfagift, it often has a default "JABODETABEK" overlay. We try clicking any button that says "Pilih" or "Masuk"
-		chromedp.ActionFunc(func(c context.Context) error {
-			// This is a best-effort click to dismiss modals
-			ctx, cancel := context.WithTimeout(c, 2*time.Second)
-			defer cancel()
-			var nodes []*cdp.Node
-			_ = chromedp.Nodes(`button`, &nodes, chromedp.ByQueryAll).Do(ctx)
-			for _, n := range nodes {
-				var text string
-				chromedp.Text([]cdp.NodeID{n.NodeID}, &text, chromedp.ByNodeID).Do(ctx)
-				if strings.Contains(strings.ToLower(text), "pilih") || strings.Contains(strings.ToLower(text), "mengerti") {
-					chromedp.MouseClickNode(n).Do(ctx)
-					time.Sleep(1 * time.Second)
-				}
-			}
-			return nil
-		}),
-		
-		// Wait again for products to fetch
+		chromedp.Navigate("https://alfagift.id/"),
+		// Wait for the main app to load and set up fingerprint tokens
 		chromedp.Sleep(5*time.Second),
-		
-		// Extract using JS
+		chromedp.Evaluate(fetchScript, nil),
+		chromedp.Poll(`window.apiResponse !== null`, nil),
 		chromedp.Evaluate(extractScript, &rawResults),
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract products from Alfagift: %w", err)
+		return nil, fmt.Errorf("failed to extract products from Alfagift API: %w", err)
 	}
 
-	log.Printf("[AlfagiftScraper] Found %d raw items.", len(rawResults))
+	log.Printf("[AlfagiftScraper] Found %d raw items via API.", len(rawResults))
 
 	for _, item := range rawResults {
-		// Clean up price: "Rp 15.500" -> 15500
-		cleanedPrice := strings.ReplaceAll(item.Price, "Rp", "")
-		cleanedPrice = strings.ReplaceAll(cleanedPrice, ".", "")
-		cleanedPrice = strings.ReplaceAll(cleanedPrice, " ", "")
-		cleanedPrice = strings.TrimSpace(cleanedPrice)
-
-		priceInt, err := strconv.ParseFloat(cleanedPrice, 64)
-		if err != nil {
-			log.Printf("[AlfagiftScraper] Warning: failed to parse price '%s' for item '%s'", item.Price, item.Name)
-			continue
-		}
-
+		// Even if price is 0 (due to location), we still save the product structure
 		products = append(products, model.Product{
 			Name:        item.Name,
-			Price:       priceInt,
+			Price:       item.Price,
 			SourceURL:   targetURL,
 			ImageURL:    item.ImageURL,
 			Supermarket: "Alfagift",
